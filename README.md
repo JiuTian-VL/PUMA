@@ -29,11 +29,12 @@ School of Computer Science and Technology, Harbin Institute of Technology, Shenz
 
 ## :fire: Introduction
 
-This is the github repository of *PUMA: Layer-Pruned Language Model for Efficient Unified Multimodal Retrieval with Modality-Adaptive Learning*. In this work, we propose **Layer-Pruned Self-Distillation** approach from the perspective of model structure. It structurally prunes the model by preserving only the shallow layers, substantially reducing the parameters of MLLM. We also propose **Modality-Adaptive Contrastive Learning** Loss (MAC-Loss) from the perspective of model learning. It adaptively separates in-batch negative candidate samples into harder intra-modality and easier inter-modality ones, and combines this with the dynamic temperature strategy to achieve cost-free hard negative sampling.
+This is the github repository of *PUMA: Layer-Pruned Language Model for Efficient Unified Multimodal Retrieval with Modality-Adaptive Learning*. 
+To address the efficiency challenges of MLLM-based unified multimodal retrieval (UMR) in real-world applications. In this work, we propose **Layer-Pruned Self-Distillation** approach from the perspective of model structure. It structurally prunes the model by preserving only the shallow layers, substantially reducing the parameters of MLLM. We also propose **Modality-Adaptive Contrastive Learning** Loss (MAC-Loss) from the perspective of model learning. It adaptively separates in-batch negative candidate samples into harder intra-modality and easier inter-modality ones, and combines this with the dynamic temperature strategy to achieve cost-free hard negative sampling.
 
-The whole framework of LION-FS:
+The framework of PUMA:
 
 <div align="center">
-<img src='assets/framework.pdf' width='100%'>
+<img src='assets/framework.png' width='100%'>
 </div>
 
