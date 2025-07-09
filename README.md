@@ -4,7 +4,7 @@
 <h2 class="papername"> <img src="./assets/PUMA.png" style="vertical-align: middle; height: 1em; padding: 0 0.2em;"> PUMA: Layer-Pruned Language Model for Efficient Unified Multimodal Retrieval with Modality-Adaptive Learning</h2>
 <div>
 <div>
-    <a href="" target="_blank">Yibo Lyu</a>,
+    <a href="https://weberLyu.github.io" target="_blank">Yibo Lyu</a>,
     <a href="https://rshaojimmy.github.io/" target="_blank">Rui Shao*</a>,
     <a href="https://scholar.google.com/citations?user=Mpg0w3cAAAAJ&hl=en&oi=ao" target="_blank">Gongwei Chen</a>,
     <a href="https://scholar.google.com.hk/citations?user=0GtAUPoAAAAJ&hl=zh-CN&oi=sra" target="_blank">Yijie Zhu</a>,
@@ -38,3 +38,8 @@ The framework of PUMA:
 <img src='assets/framework.png' width='100%'>
 </div>
 
+The results of PUMA:
+
+<div align="center">
+<img src='assets/exp1.png' width='100%'>
+</div>
