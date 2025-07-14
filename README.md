@@ -24,7 +24,7 @@ School of Computer Science and Technology, Harbin Institute of Technology, Shenz
 ## :fire: If you find this work useful for your research, please kindly cite our paper and star our repo.
 
 ## :fire: Updates
-- [07/2025] [Arxiv paper](https://arxiv.org/abs/2503.03663) released.
+- [07/2025] [Arxiv paper](https://arxiv.org/abs/2507.08064) released.
 - [07/2025] PUMA has been accepted by ACM MM 2025!
 
 ## :fire: Introduction
