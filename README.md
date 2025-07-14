@@ -15,7 +15,7 @@ School of Computer Science and Technology, Harbin Institute of Technology, Shenz
 *Corresponding author
 
 
-[![arXiv](https://img.shields.io/badge/arXiv-2501.16297-b31b1b.svg?logo=arxiv)](https://arxiv.org/abs/2503.03663)
+[![arXiv](https://img.shields.io/badge/arXiv-2507.08064-b31b1b.svg?logo=arxiv)](https://arxiv.org/abs/2507.08064)
 
 </div>
 
