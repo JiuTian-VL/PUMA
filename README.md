@@ -23,14 +23,9 @@ School of Computer Science and Technology, Harbin Institute of Technology, Shenz
 
 ## :fire: If you find this work useful for your research, please kindly cite our paper and star our repo.
 
-## :fire: Updates
-- [07/2025] [Arxiv paper](https://arxiv.org/abs/2507.08064) released.
-- [07/2025] PUMA has been accepted by ACM MM 2025!
-
 ## :fire: Introduction
 
-This is the github repository of *PUMA: Layer-Pruned Language Model for Efficient Unified Multimodal Retrieval with Modality-Adaptive Learning*. 
-To address the efficiency challenges of MLLM-based unified multimodal retrieval (UMR) in real-world applications. In this work, we propose **Layer-Pruned Self-Distillation** approach from the perspective of model structure. It structurally prunes the model by preserving only the shallow layers, substantially reducing the parameters of MLLM. We also propose **Modality-Adaptive Contrastive Learning** Loss (MAC-Loss) from the perspective of model learning. It adaptively separates in-batch negative candidate samples into harder intra-modality and easier inter-modality ones, and combines this with the dynamic temperature strategy to achieve cost-free hard negative sampling.
+This is the github repository of *PUMA: Layer-Pruned Language Model for Efficient Unified Multimodal Retrieval with Modality-Adaptive Learning*. To address the efficiency challenges of MLLM-based unified multimodal retrieval (UMR) in real-world applications. In this work, we propose **Layer-Pruned Self-Distillation** approach from the perspective of model structure. It structurally prunes the model by preserving only the shallow layers, substantially reducing the parameters of MLLM. We also propose **Modality-Adaptive Contrastive Learning** Loss (MAC-Loss) from the perspective of model learning. It adaptively separates in-batch negative candidate samples into harder intra-modality and easier inter-modality ones, and combines this with the dynamic temperature strategy to achieve cost-free hard negative sampling.
 
 The framework of PUMA:
 
@@ -38,21 +33,62 @@ The framework of PUMA:
 <img src='assets/framework.png' width='100%'>
 </div>
 
-The results of PUMA:
+## Installation
+```python
+# Create and activate conda environment
+conda create -n puma python=3.10 -y
+conda activate puma
 
-<div align="center">
-<img src='assets/exp1.png' width='100%'>
-</div>
+# Clone our repo and pip install to download dependencies
+https://github.com/JiuTian-VL/PUMA.git
+cd PUMA
+pip install -r requirements.txt
+```
+
+## Training
+Download [Qwen2-VL](https://huggingface.co/Qwen/Qwen2-VL-7B-Instruct), [M-BEIR](https://huggingface.co/datasets/TIGER-Lab/M-BEIR) dataset, and the pretraining dataset in this [link](https://huggingface.co/datasets/princeton-nlp/datasets-for-simcse).
+
+Before training, please run ```notebook/copy_pre_layers.ipynb``` to prune and copy the first k layers.
+
+Run the scripts to start training:
+```python
+# finetune stage1
+bash scripts/train/finetune_distill.sh
+```
+```python
+# merge lora in stage1
+bash scripts/train/merge_lora.sh
+```
+```python
+# finetune stage2
+bash scripts/train/finetune_lora_stage2.sh
+```
+
+
+## Evaluation
+```python
+# Embedding
+bash scripts/eval/embed.sh
+# Evaluation
+bash scripts/eval/eval.sh
+```
+We follow the evaluation in [UniIR](https://github.com/TIGER-AI-Lab/UniIR). 
+Before evaluation, you should make sure ```index.yaml``` and ```retrieval.yaml``` correspond to the dataset being evaluated. 
+We recommend you can embedding and evaluating a subset of the dataset. You can simply comment out the unnecessary datasets as needed. We also recommend use multi-GPU for inference.
+
+## Acknowledgements
+Many thanks to the code from [LamRA](https://github.com/Code-kunkun/LamRA) and [finetune Qwen](https://github.com/2U1/Qwen-VL-Series-Finetune).
 
 ## :fire: Citation
 
 If you find this work useful for your research, please kindly cite our paper:
 
 ```
-@article{lyu2025puma,
-  title={PUMA: Layer-Pruned Language Model for Efficient Unified Multimodal Retrieval with Modality-Adaptive Learning},
+@inproceedings{lyu2025puma,
+  title={Puma: Layer-pruned language model for efficient unified multimodal retrieval with modality-adaptive learning},
   author={Lyu, Yibo and Shao, Rui and Chen, Gongwei and Zhu, Yijie and Guan, Weili and Nie, Liqiang},
-  journal={arXiv preprint arXiv:2507.08064},
+  booktitle={Proceedings of the 33rd ACM International Conference on Multimedia},
+  pages={7653--7662},
   year={2025}
 }
 ```
