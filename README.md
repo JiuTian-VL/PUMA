@@ -40,7 +40,7 @@ conda create -n puma python=3.10 -y
 conda activate puma
 
 # Clone our repo and pip install to download dependencies
-https://github.com/JiuTian-VL/PUMA.git
+git clone https://github.com/JiuTian-VL/PUMA.git
 cd PUMA
 pip install -r requirements.txt
 ```
