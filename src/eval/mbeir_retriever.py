@@ -1,10 +1,10 @@
 """
-This module contains the code for indexing and retrieval using FAISS based on the MBEIR embeddings.
+This module contains the code for retrieval using exact NumPy inner-product search on the MBEIR embeddings. Remove faiss.
 """
 
 import os
 import sys
-sys.path.append('')
+sys.path.append('/data7/Users/lyb/code/Qwen2-VL-Finetune')
 import argparse
 from omegaconf import OmegaConf
 from collections import defaultdict
@@ -14,9 +14,9 @@ import json
 import numpy as np
 import csv
 import gc
-import torch
 
-import faiss
+import pickle
+import torch
 
 from src.eval.utils import (
     load_jsonl_as_list,
@@ -32,103 +32,6 @@ from src.eval.utils import (
 )
 # import dist_utils
 # from interactive_retriever import InteractiveRetriever
-
-
-def create_index(config):
-    """This script builds the faiss index for the embeddings generated"""
-    uniir_dir = config.uniir_dir
-    mbeir_data_dir = config.mbeir_data_dir
-    index_config = config.index_config
-    embed_dir_name = index_config.embed_dir_name
-    index_dir_name = index_config.index_dir_name
-    expt_dir_name = config.experiment.path_suffix
-
-    idx_cand_pools_config = index_config.cand_pools_config
-    assert idx_cand_pools_config.enable_idx, "Indexing is not enabled for candidate pool"
-    split_name = "cand_pool"
-    cand_pool_name_list = idx_cand_pools_config.cand_pools_name_to_idx
-
-    # Pretty Print dataset to index
-    print("-" * 30)
-    print(f"Split: {split_name}, Candidate pool to index: {cand_pool_name_list}")
-    print("-" * 30)
-
-    for cand_pool_name in cand_pool_name_list:
-        cand_pool_name = cand_pool_name.lower()
-
-        embed_data_file = f"mbeir_{cand_pool_name}_{split_name}_embed.npy"
-        embed_data_path = os.path.join(mbeir_data_dir, embed_data_file)
-
-        embed_data_hashed_id_file = f"mbeir_{cand_pool_name}_{split_name}_ids.npy"
-        embed_data_hashed_id_path = os.path.join(
-            mbeir_data_dir,
-            embed_data_hashed_id_file
-        )
-
-        print(f"Building index for {embed_data_path} and {embed_data_hashed_id_path}")
-
-        # Load the embeddings and IDs from the .npy files
-        embedding_list = np.load(embed_data_path).astype("float32")
-        hashed_id_list = np.load(embed_data_hashed_id_path)
-        # hashed_id_list = np.vectorize(hash_did)(hashed_id_list)
-        
-
-        # Check unique ids
-        assert len(hashed_id_list) == len(set(hashed_id_list)), "IDs should be unique"
-
-        # Normalize the embeddings
-        faiss.normalize_L2(embedding_list)
-
-        # Dimension of the embeddings
-        d = embedding_list.shape[1]
-
-        # Create the FAISS index on the CPU
-        faiss_config = index_config.faiss_config
-        print(d, faiss_config.dim)
-        assert faiss_config.dim == d, "The dimension of the index does not match the dimension of the embeddings!"
-        metric = getattr(faiss, faiss_config.metric)
-        cpu_index = faiss.index_factory(
-            faiss_config.dim,
-            f"IDMap,{faiss_config.idx_type}",
-            metric,
-        )
-        print("Creating FAISS index with the following parameters:")
-        print(f"Index type: {faiss_config.idx_type}")
-        print(f"Metric: {faiss_config.metric}")
-        print(f"Dimension: {faiss_config.dim}")
-
-        # Distribute the index across multiple GPUs
-        ngpus = faiss.get_num_gpus()
-        print(f"Number of GPUs used for indexing: {ngpus}")
-        co = faiss.GpuMultipleClonerOptions()
-        co.shard = False
-        index_gpu = faiss.index_cpu_to_all_gpus(cpu_index, co=co, ngpu=ngpus)
-        
-        index_gpu.add_with_ids(embedding_list, hashed_id_list)
-
-        # Transfer the GPU index back to the CPU for saving
-        index_cpu = faiss.index_gpu_to_cpu(index_gpu)
-
-        # Save the CPU index to disk
-        index_path = os.path.join(
-            mbeir_data_dir,
-            f"mbeir_{cand_pool_name}_{split_name}.index",
-        )
-        os.makedirs(os.path.dirname(index_path), exist_ok=True)
-        faiss.write_index(index_cpu, index_path)
-        print(f"Successfully indexed {index_cpu.ntotal} documents")
-        print(f"Index saved to: {index_path}")
-
-        # 1. Delete large objects
-        del embedding_list
-        del hashed_id_list
-        del cpu_index
-        del index_gpu
-        del index_cpu
-
-        # 2. Force garbage collection
-        gc.collect()
-
 
 def compute_recall_at_k(relevant_docs, retrieved_indices, k):
     # Recall used by CLIP and BLIP codebase
@@ -168,14 +71,22 @@ def load_qrel(filename):
     )
     return qrel, qid_to_taskid
 
-def search_index_np(query_embed_path, cand_embed_path, batch_size=10, num_cand_to_retrieve=10):
+def search_index_np(query_embed_path, cand_embed_path, batch_size=10, num_cand_to_retrieve=10, alpha_penalty=0.2):
+    # 加载查询和候选嵌入
     query_embeddings = np.load(query_embed_path).astype("float32")
     cand_embeddings = np.load(cand_embed_path).astype("float32")
     print(f"Loaded query embeddings from {query_embed_path} with shape: {query_embeddings.shape}")
     print(f"Loaded candidate embeddings from {cand_embed_path} with shape: {cand_embeddings.shape}")
 
+    cand_ids_path = cand_embed_path.replace("_embed.npy", "_ids.npy")
+    cand_ids = np.load(cand_ids_path)
+
+    # 对查询和候选嵌入进行归一化
     query_embeddings = query_embeddings / np.linalg.norm(query_embeddings, axis=1, keepdims=True)
     cand_embeddings = cand_embeddings / np.linalg.norm(cand_embeddings, axis=1, keepdims=True)
+
+    # alpha_penalty: 减去候选热度，抑制对所有 query 都高分的 popular candidate
+    cand_popularity = (query_embeddings @ cand_embeddings.T).mean(axis=0) if alpha_penalty > 0.0 else None
 
     all_distances = []
     all_indices = []
@@ -184,63 +95,24 @@ def search_index_np(query_embed_path, cand_embed_path, batch_size=10, num_cand_t
     for i in range(0, len(query_embeddings), batch_size):
         batch = query_embeddings[i : i + batch_size]
 
+        # 计算余弦相似度（点积）
         similarity_matrix = np.dot(batch, cand_embeddings.T)
+        if alpha_penalty > 0.0:
+            similarity_matrix = similarity_matrix - alpha_penalty * cand_popularity[None, :]
+
+        # 对每个查询获取最相似的 k 个候选
         distances = -np.sort(-similarity_matrix, axis=1)[:, :num_cand_to_retrieve]
         indices = np.argsort(-similarity_matrix, axis=1)[:, :num_cand_to_retrieve]
 
         all_distances.append(distances)
         all_indices.append(indices)
 
+    # 将所有批次结果堆叠
     final_distances = np.vstack(all_distances)
-    final_indices = np.vstack(all_indices)
+    final_indices = cand_ids[np.vstack(all_indices)]
+
 
     return final_distances, final_indices
-
-def search_index(query_embed_path, cand_index_path, batch_size=10, num_cand_to_retrieve=10):
-    # Load the full query embeddings
-    query_embeddings = np.load(query_embed_path).astype("float32")
-    print(f"Faiss: loaded query embeddings from {query_embed_path} with shape: {query_embeddings.shape}")
-
-    # Normalize the full query embeddings
-    faiss.normalize_L2(query_embeddings)
-
-    # Load the saved CPU index from disk
-    index_cpu = faiss.read_index(cand_index_path)
-    print(f"Faiss: loaded index from {cand_index_path}")
-    print(f"Faiss: Number of documents in the index: {index_cpu.ntotal}")
-
-    # Convert the CPU index to multiple GPU indices
-    ngpus = faiss.get_num_gpus()
-    print(f"Faiss: Number of GPUs used for searching: {ngpus}")
-    co = faiss.GpuMultipleClonerOptions()
-    co.shard = True  # Use shard to divide the data across the GPUs
-    index_gpu = faiss.index_cpu_to_all_gpus(index_cpu, co=co, ngpu=ngpus)  # This shards the index across all GPUs
-
-    all_distances = []
-    all_indices = []
-
-    # Process in batches
-    for i in range(0, len(query_embeddings), batch_size):
-        batch = query_embeddings[i : i + batch_size]
-        distances, indices = search_index_with_batch(batch, index_gpu, num_cand_to_retrieve)
-        all_distances.append(distances)
-        all_indices.append(indices)
-
-    # Stack results for distances and indices
-    final_distances = np.vstack(all_distances)
-    final_indices = np.vstack(all_indices)
-
-    return final_distances, final_indices
-
-
-def search_index_with_batch(query_embeddings_batch, index_gpu, num_cand_to_retrieve=10):
-    # Ensure query_embeddings_batch is numpy array with dtype float32
-    assert isinstance(query_embeddings_batch, np.ndarray) and query_embeddings_batch.dtype == np.float32
-    print(f"Faiss: query_embeddings_batch.shape: {query_embeddings_batch.shape}")
-
-    # Query the multi-GPU index
-    distances, indices = index_gpu.search(query_embeddings_batch, num_cand_to_retrieve)  # (number_of_queries, k)
-    return distances, indices
 
 
 def get_raw_retrieved_candidates(
@@ -321,7 +193,7 @@ def get_raw_retrieved_candidates(
 
 
 def run_retrieval(config, query_embedder_config=None):
-    """This script runs retrieval on the faiss index"""
+    """This script runs retrieval using exact NumPy search on the .npy embeddings"""
     uniir_dir = config.uniir_dir
     mbeir_data_dir = config.mbeir_data_dir
     retrieval_config = config.retrieval_config
@@ -404,17 +276,21 @@ def run_retrieval(config, query_embedder_config=None):
             cand_pool_name = cand_pool_name.lower()
             qrel_name = qrel_name.lower()
 
+            # Load qrels
             qrel_path = os.path.join(qrel_dir, split, f"mbeir_{qrel_name}_{split}_qrels.txt")
             qrel, qid_to_taskid = load_qrel(qrel_path)
 
 
+            # Load query Hashed IDs
             embed_query_id_path = os.path.join(dataset_embed_dir, f"mbeir_{dataset_name}_{split}_ids.npy")
             hashed_query_ids = np.load(embed_query_id_path)
 
 
+            # Load query embeddings
             embed_query_path = os.path.join(dataset_embed_dir, f"mbeir_{dataset_name}_{split}_embed.npy")
 
-            cand_index_path = os.path.join(cand_index_dir, f"mbeir_{cand_pool_name}_cand_pool.index")
+            # Load the candidate pool embeddings (纯 numpy 精确检索，不再用 faiss 索引)
+            cand_embed_path = os.path.join(cand_index_dir, f"mbeir_{cand_pool_name}_cand_pool_embed.npy")
 
             # Set up the metric
             # e.g. "Recall@1, Recall@5, Recall@10"
@@ -425,18 +301,12 @@ def run_retrieval(config, query_embedder_config=None):
             # Search the index
             k = max([int(metric.split("@")[1]) for metric in metric_recall_list])
             print(f"Retriever: Searching with k={k}")
-            # retrieved_cand_dist, retrieved_indices = search_index_np(
-            #     embed_query_path,
-            #     embed_cand_path,
-            #     batch_size=hashed_query_ids.shape[0],
-            #     num_cand_to_retrieve=k,
-            # )  # Shape: (number_of_queries, k)
-
-            retrieved_cand_dist, retrieved_indices = search_index(
+            retrieved_cand_dist, retrieved_indices = search_index_np(
                 embed_query_path,
-                cand_index_path,
+                cand_embed_path,
                 batch_size=hashed_query_ids.shape[0],
                 num_cand_to_retrieve=k,
+                alpha_penalty=0.2,
             )  # Shape: (number_of_queries, k)
 
             # Open a file to write the run results
@@ -569,7 +439,6 @@ def run_retrieval(config, query_embedder_config=None):
 
     # Write the sorted data to TSV
     if retrieval_config.write_to_tsv:
-        # TODO: create a better file name
         date_time = datetime.now().strftime("%m-%d-%H")
         tsv_file_name = f"eval_results_{date_time}.tsv"
         tsv_file_path = os.path.join(exp_tsv_results_dir, tsv_file_name)
@@ -622,8 +491,8 @@ def run_retrieval(config, query_embedder_config=None):
 
 
 def parse_arguments():
-    parser = argparse.ArgumentParser(description="FAISS Pipeline")
-    parser.add_argument("--uniir_dir", type=str, default="")
+    parser = argparse.ArgumentParser(description="Retrieval Pipeline")
+    parser.add_argument("--uniir_dir", type=str, default="/data7/Users/lyb/code/Qwen2-VL-Finetune")
     parser.add_argument("--mbeir_data_dir", type=str, default="/data/UniIR/mbeir_data")
     parser.add_argument("--config_path", default="config.yaml", help="Path to the config file.")
     parser.add_argument(
@@ -631,7 +500,6 @@ def parse_arguments():
         default="",
         help="Path to the query embedder config file. Used when retrieving candidates with complement modalities in raw_retrieval mode.",
     )
-    parser.add_argument("--enable_create_index", action="store_true", help="Enable create index")
     parser.add_argument(
         "--enable_hard_negative_mining",
         action="store_true",
@@ -652,9 +520,6 @@ def main():
 
     interactive_retrieval = True if args.query_embedder_config_path else False
     query_embedder_config = None
-
-    if args.enable_create_index:
-        create_index(config)
 
     if args.enable_retrieval:
         run_retrieval(config, query_embedder_config)

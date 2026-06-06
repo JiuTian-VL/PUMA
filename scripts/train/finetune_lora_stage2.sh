@@ -7,7 +7,7 @@ export TOKENIZERS_PARALLELISM=false
 MODEL_NAME="/model/stage1_merged"
 
 # 4*80G GPU
-deepspeed --include localhost:0,1,2,3 --master_port 25671 src/training/train_pre.py \
+deepspeed --include localhost:0,1,2,3 --master_port 25671 src/training/train_layer.py \
     --lora_enable True \
     --lora_namespan_exclude "['embed_tokens', 'router']" \
     --lora_rank 128 \
@@ -48,7 +48,7 @@ deepspeed --include localhost:0,1,2,3 --master_port 25671 src/training/train_pre
     --lazy_preprocess True \
     --save_strategy "steps" \
     --save_steps 3000 \
-    --decay_rate 0.2 \
+    --decay_rate 0.5 \
     --save_total_limit 10 \
     --dataloader_num_workers 8 \
     --softmax_temperature 0.03 \
@@ -57,6 +57,6 @@ deepspeed --include localhost:0,1,2,3 --master_port 25671 src/training/train_pre
     --compression False \
     --info_hard False \
     --drop False \
-    --hard_norm False \
+    --hard_norm True \
     --router False \
     --layer_num 12

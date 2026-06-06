@@ -632,14 +632,14 @@ class QwenTrainer(Trainer):
 
                 if self.args.mse:
                     # paper setting
-                    # loss = info_loss * 0.9 + distill_loss * 0.1
+                    loss = info_loss * 0.9 + distill_loss * 0.1
 
-                    # new setting - dynamic weight
-                    alpha = current_epoch / total_epochs
-                    info_weight = 0.5 + 0.4 * alpha
-                    distill_weight = 1.0 - info_weight
-
-                    loss = info_loss * info_weight + distill_loss * distill_weight
+                    # selection - dynamic weight
+                    # alpha = current_epoch / total_epochs
+                    # info_weight = 0.5 + 0.4 * alpha
+                    # distill_weight = 1.0 - info_weight
+                    # loss = info_loss * info_weight + distill_loss * distill_weight
+                    
                 else:
                     loss = info_loss
             self.accelerator.backward(loss, scale_wrt_gas=False)
